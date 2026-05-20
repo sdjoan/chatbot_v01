@@ -1,57 +1,204 @@
 import streamlit as st
 from openai import OpenAI
 
-# Show title and description.
-st.title("💬 Chatbot")
-st.write(
-    "This is a simple chatbot that uses OpenAI's GPT-3.5 model to generate responses. "
-    "To use this app, you need to provide an OpenAI API key, which you can get [here](https://platform.openai.com/account/api-keys). "
-    "You can also learn how to build this app step by step by [following our tutorial](https://docs.streamlit.io/develop/tutorials/llms/build-conversational-apps)."
+# -----------------------------------
+# 페이지 설정
+# -----------------------------------
+st.set_page_config(
+    page_title="세계 날씨 & 시간 챗봇",
+    page_icon="🌍",
+    layout="centered"
 )
 
-# Ask user for their OpenAI API key via `st.text_input`.
-# Alternatively, you can store the API key in `./.streamlit/secrets.toml` and access it
-# via `st.secrets`, see https://docs.streamlit.io/develop/concepts/connections/secrets-management
-openai_api_key = st.text_input("OpenAI API Key", type="password")
+# -----------------------------------
+# 제목
+# -----------------------------------
+st.title("🌍 세계 날씨 & 시간 챗봇")
+
+st.write(
+    """
+세계 지역/도시의:
+- 🌤️ 날씨
+- 🕒 현재 시간
+- 🌏 한국과의 시차
+- ✈️ 여행 팁
+
+을 알려주는 AI 챗봇입니다.
+"""
+)
+
+# -----------------------------------
+# OpenAI API Key 입력
+# -----------------------------------
+openai_api_key = st.text_input(
+    "OpenAI API Key",
+    type="password"
+)
+
 if not openai_api_key:
-    st.info("Please add your OpenAI API key to continue.", icon="🗝️")
-else:
+    st.info("OpenAI API Key를 입력해주세요.", icon="🗝️")
+    st.stop()
 
-    # Create an OpenAI client.
-    client = OpenAI(api_key=openai_api_key)
+# -----------------------------------
+# OpenAI Client
+# -----------------------------------
+client = OpenAI(api_key=openai_api_key)
 
-    # Create a session state variable to store the chat messages. This ensures that the
-    # messages persist across reruns.
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
+# -----------------------------------
+# 시스템 프롬프트
+# -----------------------------------
+SYSTEM_PROMPT = """
+당신은 세계 날씨와 시간 정보를 알려주는 AI 여행 도우미입니다.
 
-    # Display the existing chat messages via `st.chat_message`.
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+역할:
+- 세계 도시의 현재 날씨 설명
+- 현재 시간 안내
+- 한국(서울)과의 시차 설명
+- 여행 팁 제공
+- 친절하고 쉽게 설명
 
-    # Create a chat input field to allow the user to enter a message. This will display
-    # automatically at the bottom of the page.
-    if prompt := st.chat_input("What is up?"):
+규칙:
+- 답변은 간결하고 보기 쉽게 작성
+- 리스트 형태 사용
+- 이모지 적극 활용
+- 도시와 국가명을 함께 설명
+"""
 
-        # Store and display the current prompt.
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
+# -----------------------------------
+# 추천 질문
+# -----------------------------------
+st.subheader("추천 질문")
 
-        # Generate a response using the OpenAI API.
+col1, col2 = st.columns(2)
+
+with col1:
+    if st.button("🇺🇸 뉴욕 날씨 알려줘"):
+        st.session_state.example = "뉴욕 날씨와 현재 시간 알려줘"
+
+    if st.button("🇯🇵 도쿄와 서울 시차는?"):
+        st.session_state.example = "도쿄와 서울 시차 알려줘"
+
+with col2:
+    if st.button("🇫🇷 파리 여행 날씨"):
+        st.session_state.example = "파리 현재 날씨와 여행 팁 알려줘"
+
+    if st.button("🇦🇺 시드니 지금 몇 시야?"):
+        st.session_state.example = "시드니 현재 시간 알려줘"
+
+# -----------------------------------
+# 세션 상태 초기화
+# -----------------------------------
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+# -----------------------------------
+# 이전 메시지 출력
+# -----------------------------------
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
+
+# -----------------------------------
+# 입력창
+# -----------------------------------
+default_prompt = st.session_state.get("example", "")
+
+prompt = st.chat_input(
+    "도시 이름이나 질문을 입력하세요"
+)
+
+if default_prompt and not prompt:
+    prompt = default_prompt
+    st.session_state.example = ""
+
+# -----------------------------------
+# 사용자 입력 처리
+# -----------------------------------
+if prompt:
+
+    # 사용자 메시지 저장
+    st.session_state.messages.append(
+        {
+            "role": "user",
+            "content": prompt
+        }
+    )
+
+    # 사용자 메시지 출력
+    with st.chat_message("user"):
+        st.markdown(prompt)
+
+    # 시스템 메시지 포함
+    messages = [
+        {
+            "role": "system",
+            "content": SYSTEM_PROMPT
+        }
+    ] + st.session_state.messages
+
+    # Assistant 응답
+    with st.chat_message("assistant"):
+
+        placeholder = st.empty()
+        full_response = ""
+
         stream = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            # model="gpt-4.1-min",            
-            messages=[
-                {"role": m["role"], "content": m["content"]}
-                for m in st.session_state.messages
-            ],
+            model="gpt-4.1-mini",
+            messages=messages,
             stream=True,
         )
 
-        # Stream the response to the chat using `st.write_stream`, then store it in 
-        # session state.
-        with st.chat_message("assistant"):
-            response = st.write_stream(stream)
-        st.session_state.messages.append({"role": "assistant", "content": response})
+        for chunk in stream:
+
+            delta = chunk.choices[0].delta.content
+
+            if delta:
+                full_response += delta
+                placeholder.markdown(full_response + "▌")
+
+        placeholder.markdown(full_response)
+
+    # 응답 저장
+    st.session_state.messages.append(
+        {
+            "role": "assistant",
+            "content": full_response
+        }
+    )
+
+# -----------------------------------
+# 사이드바
+# -----------------------------------
+with st.sidebar:
+
+    st.header("🌎 빠른 도시 검색")
+
+    st.markdown("""
+    추천 도시:
+    - 서울
+    - 도쿄
+    - 뉴욕
+    - 런던
+    - 파리
+    - 시드니
+    - 방콕
+    - 싱가포르
+    - 로마
+    - 두바이
+    """)
+
+    st.divider()
+
+    st.markdown("""
+    💡 예시 질문:
+    - 런던 날씨 알려줘
+    - 뉴욕 지금 몇 시야?
+    - 파리와 서울 시차는?
+    - 도쿄 여행 옷차림 추천
+    """)
+
+    st.divider()
+
+    if st.button("🗑️ 대화 초기화"):
+        st.session_state.messages = []
+        st.rerun()
