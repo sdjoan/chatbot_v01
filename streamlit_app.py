@@ -1,6 +1,11 @@
 import streamlit as st
 from openai import OpenAI
 
+st.set_page_config(
+    page_title="헬스케어 가이드 챗봇",
+    page_icon="🌿",
+    layout="centered"
+)
 # -----------------------------------
 # 페이지 설정
 # -----------------------------------
