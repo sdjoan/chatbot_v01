@@ -1,57 +1,197 @@
 import streamlit as st
 from openai import OpenAI
 
-# Show title and description.
-st.title("💬 Chatbot")
-st.write(
-    "This is a simple chatbot that uses OpenAI's GPT-3.5 model to generate responses. "
-    "To use this app, you need to provide an OpenAI API key, which you can get [here](https://platform.openai.com/account/api-keys). "
-    "You can also learn how to build this app step by step by [following our tutorial](https://docs.streamlit.io/develop/tutorials/llms/build-conversational-apps)."
+# -----------------------------
+# 페이지 설정
+# -----------------------------
+st.set_page_config(
+    page_title="AI 건강 코치",
+    page_icon="💪",
+    layout="centered"
 )
 
-# Ask user for their OpenAI API key via `st.text_input`.
-# Alternatively, you can store the API key in `./.streamlit/secrets.toml` and access it
-# via `st.secrets`, see https://docs.streamlit.io/develop/concepts/connections/secrets-management
-openai_api_key = st.text_input("OpenAI API Key", type="password")
-if not openai_api_key:
-    st.info("Please add your OpenAI API key to continue.", icon="🗝️")
-else:
+# -----------------------------
+# 제목
+# -----------------------------
+st.title("💪 AI 건강 코치")
+st.caption("생활 습관 · 운동 · 식습관 · 건강 관리 도우미")
 
-    # Create an OpenAI client.
-    client = OpenAI(api_key=openai_api_key)
+# -----------------------------
+# API Key 입력
+# -----------------------------
+api_key = st.text_input(
+    "OpenAI API Key",
+    type="password"
+)
 
-    # Create a session state variable to store the chat messages. This ensures that the
-    # messages persist across reruns.
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
+if not api_key:
+    st.info("OpenAI API Key를 입력해주세요.")
+    st.stop()
 
-    # Display the existing chat messages via `st.chat_message`.
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+# -----------------------------
+# OpenAI Client
+# -----------------------------
+client = OpenAI(api_key=api_key)
 
-    # Create a chat input field to allow the user to enter a message. This will display
-    # automatically at the bottom of the page.
-    if prompt := st.chat_input("What is up?"):
+# -----------------------------
+# 시스템 프롬프트
+# -----------------------------
+SYSTEM_PROMPT = """
+당신은 친절한 AI 건강 코치입니다.
 
-        # Store and display the current prompt.
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
+역할:
+- 생활 습관 개선 안내
+- 쉬운 운동 추천
+- 건강한 식습관 조언
+- 수면 및 스트레스 관리 도움
+- 초보자도 이해하기 쉽게 설명
 
-        # Generate a response using the OpenAI API.
+규칙:
+- 의료 진단 금지
+- 약 처방 금지
+- 위험 증상은 병원 상담 권고
+- 긍정적이고 따뜻한 말투 사용
+- 실천 가능한 작은 습관 위주로 안내
+- 답변은 짧고 이해하기 쉽게 작성
+
+답변 스타일:
+- 핵심 먼저 설명
+- 리스트 형태 적극 사용
+- 하루 실천 팁 제공
+"""
+
+# -----------------------------
+# 세션 상태 초기화
+# -----------------------------
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+# -----------------------------
+# 추천 질문 버튼
+# -----------------------------
+st.subheader("추천 질문")
+
+col1, col2 = st.columns(2)
+
+with col1:
+    if st.button("🥗 건강한 식단 추천"):
+        st.session_state.example = "건강한 식단 추천해줘"
+
+    if st.button("😴 숙면 습관 알려줘"):
+        st.session_state.example = "잠 잘 자는 습관 알려줘"
+
+with col2:
+    if st.button("🏃 초보 운동 추천"):
+        st.session_state.example = "운동 초보가 시작하기 좋은 운동 추천해줘"
+
+    if st.button("💧 물 얼마나 마셔야 해?"):
+        st.session_state.example = "하루 물 섭취량 알려줘"
+
+# -----------------------------
+# 이전 채팅 출력
+# -----------------------------
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
+
+# -----------------------------
+# 사용자 입력
+# -----------------------------
+default_prompt = st.session_state.get("example", "")
+
+prompt = st.chat_input(
+    "건강 관련 질문을 입력하세요"
+)
+
+if default_prompt and not prompt:
+    prompt = default_prompt
+    st.session_state.example = ""
+
+# -----------------------------
+# 응급 키워드 감지
+# -----------------------------
+EMERGENCY_KEYWORDS = [
+    "가슴 통증",
+    "호흡곤란",
+    "실신",
+    "심한 출혈",
+    "의식 잃음"
+]
+
+if prompt and any(word in prompt for word in EMERGENCY_KEYWORDS):
+    st.error(
+        "응급 가능성이 있습니다. 가까운 응급실 또는 119에 연락하세요."
+    )
+
+# -----------------------------
+# 채팅 처리
+# -----------------------------
+if prompt:
+
+    # 사용자 메시지 저장
+    st.session_state.messages.append(
+        {
+            "role": "user",
+            "content": prompt
+        }
+    )
+
+    # 사용자 메시지 출력
+    with st.chat_message("user"):
+        st.markdown(prompt)
+
+    # 시스템 프롬프트 포함
+    messages = [
+        {
+            "role": "system",
+            "content": SYSTEM_PROMPT
+        }
+    ] + st.session_state.messages
+
+    # AI 응답
+    with st.chat_message("assistant"):
+
+        placeholder = st.empty()
+        full_response = ""
+
         stream = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            # model="gpt-4.1-min",            
-            messages=[
-                {"role": m["role"], "content": m["content"]}
-                for m in st.session_state.messages
-            ],
-            stream=True,
+            model="gpt-4.1-mini",
+            messages=messages,
+            stream=True
         )
 
-        # Stream the response to the chat using `st.write_stream`, then store it in 
-        # session state.
-        with st.chat_message("assistant"):
-            response = st.write_stream(stream)
-        st.session_state.messages.append({"role": "assistant", "content": response})
+        for chunk in stream:
+            delta = chunk.choices[0].delta.content
+
+            if delta:
+                full_response += delta
+                placeholder.markdown(full_response + "▌")
+
+        placeholder.markdown(full_response)
+
+    # 응답 저장
+    st.session_state.messages.append(
+        {
+            "role": "assistant",
+            "content": full_response
+        }
+    )
+
+# -----------------------------
+# 사이드바
+# -----------------------------
+with st.sidebar:
+
+    st.header("📌 건강 습관 TIP")
+
+    st.markdown("""
+    - 하루 30분 걷기
+    - 물 충분히 마시기
+    - 늦은 야식 줄이기
+    - 규칙적인 수면
+    - 스트레칭 자주 하기
+    """)
+
+    if st.button("대화 초기화"):
+        st.session_state.messages = []
+        st.rerun()
